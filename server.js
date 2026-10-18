@@ -1,4 +1,5 @@
 import http from 'node:http';
+import qrcode from 'qrcode-generator';
 
 const upstream = new URL('https://crepe-sandwich.sandwichcrepe.chatgpt.site');
 const publicHost = process.env.PUBLIC_HOST || 'crepe-sandwich-live.onrender.com';
@@ -53,6 +54,17 @@ const server = http.createServer(async (req, res) => {
     const cookies = response.headers.getSetCookie();
     if (cookies.length) outgoing['set-cookie'] = cookies.map(value => value.replace(/;\s*Domain=[^;]*/ig, ''));
     outgoing['cache-control'] = outgoing['cache-control'] || 'no-store';
+    if (url.pathname === '/menu/print' && response.ok) {
+      const qr = qrcode(0, 'M');
+      qr.addData(publicOrigin + '/menu');
+      qr.make();
+      const page = (await response.text())
+        .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/i, qr.createSvgTag({cellSize: 8, margin: 32, scalable: true}))
+        .replaceAll(upstream.origin + '/menu', publicOrigin + '/menu');
+      res.writeHead(response.status, outgoing);
+      res.end(page);
+      return;
+    }
     res.writeHead(response.status, outgoing);
     if (!response.body || req.method === 'HEAD') { res.end(); return; }
     for await (const chunk of response.body) {
